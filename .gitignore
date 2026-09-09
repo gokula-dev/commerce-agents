@@ -34,6 +34,13 @@ examples/*/data/.memory-*.json
 shopping-agent/managed-agents/storefront-mcp-server/.storefront_memory.json
 merchant-agent/managed-agents/merchant-mcp-server/.merchant_memory.json
 
+# examples/logitech: real, scraped/synced Logitech catalog data — regenerate via
+# poc/logitech_ingest/build_catalog.py, never commit-once. users.json is hand-authored
+# fixture content (like the other verticals') and is safe to track.
+examples/logitech/data/*.json
+!examples/logitech/data/users.json
+poc/logitech_ingest/raw/
+
 # OS / editor / local tooling
 .DS_Store
 .idea/

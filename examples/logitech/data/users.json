@@ -1,0 +1,11 @@
+{
+ "users": [
+  {
+   "user_id": "demo-user",
+   "display_name": "Jordan",
+   "loyalty_tier": "Guest",
+   "default_location": "Fremont",
+   "preferences": {}
+  }
+ ]
+}

@@ -1,0 +1,17 @@
+[project]
+name = "logitech-demo-backend"
+version = "0.1.0"
+requires-python = ">=3.11"
+
+# Points Vercel's zero-config FastAPI support at the nested app instance, since our
+# entrypoint (logitech/api/main.py) isn't one of the flat conventional filenames
+# (app.py/main.py/etc. at this root) it auto-detects.
+[tool.vercel]
+entrypoint = "logitech.api.main:app"
+
+# Regenerates examples/logitech/data/*.json fresh from Typesense on every build,
+# instead of committing real Logitech catalog data into git (see .gitignore and
+# examples/logitech/README.md). Needs TYPESENSE_HOST/PORT/PROTOCOL/TYPESENSE_SEARCH_API_KEY
+# set as Vercel *build-time* environment variables.
+[tool.vercel.scripts]
+build = "python ../poc/logitech_ingest/build_catalog.py"

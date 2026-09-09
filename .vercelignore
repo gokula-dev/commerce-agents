@@ -1,0 +1,19 @@
+# A local `vercel deploy` uploads the invoked directory as-is, ignoring .gitignore.
+# Keep the upload lean and never ship the real synced Logitech data or the local venv.
+.git
+.venv
+venv
+node_modules
+**/node_modules
+.next
+**/.next
+__pycache__
+**/__pycache__
+*.pyc
+
+# Real Typesense-derived content — the build step (examples/pyproject.toml
+# [tool.vercel.scripts]) regenerates it fresh on every deploy.
+poc/logitech_ingest/raw
+poc/logitech_ingest/.cache
+examples/logitech/data/*.json
+!examples/logitech/data/users.json
