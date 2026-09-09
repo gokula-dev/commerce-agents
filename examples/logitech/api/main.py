@@ -13,14 +13,10 @@ not a persistent deployment.
 
 from __future__ import annotations
 
+from pathlib import Path
+
 from commerce_common.memory import InMemoryMemoryStore
-from demo_common import (
-    REPO_ROOT,
-    CartAddRequest,
-    MemorySeeder,
-    build_storefront_host,
-    load_demo_env,
-)
+from demo_common import CartAddRequest, MemorySeeder, build_storefront_host, load_demo_env
 from shopping_agent_runtime import ShoppingAgent
 
 from .agent_config import build_shopping_config
@@ -28,10 +24,17 @@ from .backend import DATA_DIR, LogitechBackend
 
 load_demo_env(DATA_DIR.parent)
 
+# A local copy of shopping-agent/skills, not a reference to the repo root: Vercel's
+# Python function bundle only ships the backend service's own root (examples/) plus
+# pip-installed packages (vendored separately) — a sibling directory of examples/ with
+# no .py files in it, like the real shopping-agent/skills/, never makes it into the
+# deployed bundle at all, whatever path is used to reach it.
+SKILLS_DIR = Path(__file__).resolve().parent.parent / "skills"
+
 backend = LogitechBackend()
 agent = ShoppingAgent(
     backend=backend,
-    skills_dir=REPO_ROOT / "shopping-agent" / "skills",
+    skills_dir=SKILLS_DIR,
     config=build_shopping_config(),
     memory_store=InMemoryMemoryStore(),
 )

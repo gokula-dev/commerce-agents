@@ -91,6 +91,10 @@ can't satisfy.
   surface (cart on; orders, policies, fulfillment, disclosures, web search off).
 - `api/main.py`: no merchant router, in-memory (not file-backed) memory store — this is a
   point-in-time comparison run, not a persistent deployment.
+- `skills/`: a **copy** of `../../shopping-agent/skills/`, not a reference to it —
+  Vercel's Python function bundle only ships the backend service's own root (`examples/`)
+  plus pip-installed packages; a sibling directory with no `.py` files in it never makes
+  it into the deployed bundle. Keep in sync by hand if the source skills change.
 - `storefront-web/`: copied from `../retail/storefront-web/` and adapted — peripherals
   glyphs in `lib/format.ts`, port 3004, no fabricated shipping/returns copy in the cart
   and checkout components (removed rather than left showing retail's placeholder terms
