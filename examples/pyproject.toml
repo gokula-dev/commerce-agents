@@ -2,10 +2,39 @@
 name = "logitech-demo-backend"
 version = "0.1.0"
 requires-python = ">=3.11"
+# Vercel's Python builder (uv) installs from [project.dependencies] here, not from
+# requirements.txt, once a pyproject.toml is present — local packages resolve via
+# [tool.uv.sources] below. requirements.txt is kept only for local venv testing
+# (poc/logitech_ingest/build_catalog.py, run directly without Vercel).
+dependencies = [
+  "commerce-common[examples]",
+  "shopping-agent-core",
+  "shopping-agent-runtime",
+  "merchant-agent-core",
+  "merchant-agent-runtime",
+  "httpx>=0.28",
+]
+
+# This pyproject.toml exists only to declare dependencies for Vercel's Python builder;
+# "examples/" holds four other verticals' own source trees as siblings (retail/,
+# travel/, etc.), so setuptools' automatic package discovery must be told there is no
+# package content of its own here to find.
+[tool.setuptools]
+packages = []
+
+# Local editable packages, paths relative to this file (the "backend" service root).
+# merchant-agent-core/-runtime are required even though this backend is shopping-only:
+# demo_common's __init__.py unconditionally imports both roles' merchant.py.
+[tool.uv.sources]
+commerce-common = { path = "../commerce-common", editable = true }
+shopping-agent-core = { path = "../shopping-agent/core", editable = true }
+shopping-agent-runtime = { path = "../shopping-agent/runtime-messages-api", editable = true }
+merchant-agent-core = { path = "../merchant-agent/core", editable = true }
+merchant-agent-runtime = { path = "../merchant-agent/runtime-messages-api", editable = true }
 
 # The entrypoint itself is declared on the "backend" service in the repo-root
 # vercel.json (services.backend.entrypoint) — that's the mechanism for a Services
-# deployment; [tool.vercel] entrypoint here is the separate, standalone-FastAPI-project
+# deployment; [tool.vercel] entrypoint is the separate, standalone-FastAPI-project
 # mechanism and isn't used in this layout.
 
 # Regenerates examples/logitech/data/*.json fresh from Typesense on every build,
