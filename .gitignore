@@ -47,3 +47,4 @@ poc/logitech_ingest/raw/
 .vscode/
 .claude/
 pyrightconfig.json
+.vercel

@@ -3,11 +3,10 @@ name = "logitech-demo-backend"
 version = "0.1.0"
 requires-python = ">=3.11"
 
-# Points Vercel's zero-config FastAPI support at the nested app instance, since our
-# entrypoint (logitech/api/main.py) isn't one of the flat conventional filenames
-# (app.py/main.py/etc. at this root) it auto-detects.
-[tool.vercel]
-entrypoint = "logitech.api.main:app"
+# The entrypoint itself is declared on the "backend" service in the repo-root
+# vercel.json (services.backend.entrypoint) — that's the mechanism for a Services
+# deployment; [tool.vercel] entrypoint here is the separate, standalone-FastAPI-project
+# mechanism and isn't used in this layout.
 
 # Regenerates examples/logitech/data/*.json fresh from Typesense on every build,
 # instead of committing real Logitech catalog data into git (see .gitignore and

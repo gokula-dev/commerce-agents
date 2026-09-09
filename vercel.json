@@ -4,7 +4,8 @@
       "root": "examples/logitech/storefront-web"
     },
     "backend": {
-      "root": "examples"
+      "root": "examples",
+      "entrypoint": "logitech.api.main:app"
     }
   },
   "rewrites": [
