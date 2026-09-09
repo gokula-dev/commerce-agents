@@ -11,9 +11,11 @@ __pycache__
 **/__pycache__
 *.pyc
 
-# Real Typesense-derived content — the build step (examples/pyproject.toml
-# [tool.vercel.scripts]) regenerates it fresh on every deploy.
+# The raw Typesense export cache is never needed by the deployed app, but the
+# *normalized* catalog.json/policies.json/orders.json in examples/logitech/data/ ARE
+# shipped as part of this deployment (deliberately NOT excluded here) — see
+# examples/logitech/README.md: search-dev.logitech.com is not reachable from Vercel's
+# build infrastructure (403), so build-time regeneration from Typesense doesn't work.
+# Refresh by rerunning poc/logitech_ingest/build_catalog.py locally and redeploying.
 poc/logitech_ingest/raw
 poc/logitech_ingest/.cache
-examples/logitech/data/*.json
-!examples/logitech/data/users.json

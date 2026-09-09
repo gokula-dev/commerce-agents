@@ -28,6 +28,13 @@ python poc/logitech_ingest/build_catalog.py                  # writes examples/l
 are regenerated and gitignored every run — see the root `.gitignore`); `data/users.json`
 is a small hand-authored guest profile, not derived from Typesense, and is tracked.
 
+**On Vercel, this data ships as a static snapshot, not a build-time sync.** The
+Typesense host used here (`search-dev.logitech.com`) isn't reachable from Vercel's build
+infrastructure (403 Forbidden) — it's a dev-environment host, presumably locked to the
+corporate network/VPN. `.vercelignore` deliberately does *not* exclude
+`examples/logitech/data/*.json`, so whatever you last generated locally is what gets
+deployed. To refresh the live demo: rerun `build_catalog.py` locally, then redeploy.
+
 ## Run
 
 ```bash

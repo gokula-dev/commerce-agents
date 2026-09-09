@@ -4,15 +4,13 @@ version = "0.1.0"
 requires-python = ">=3.11"
 # Vercel's Python builder (uv) installs from [project.dependencies] here, not from
 # requirements.txt, once a pyproject.toml is present — local packages resolve via
-# [tool.uv.sources] below. requirements.txt is kept only for local venv testing
-# (poc/logitech_ingest/build_catalog.py, run directly without Vercel).
+# [tool.uv.sources] below.
 dependencies = [
   "commerce-common[examples]",
   "shopping-agent-core",
   "shopping-agent-runtime",
   "merchant-agent-core",
   "merchant-agent-runtime",
-  "httpx>=0.28",
 ]
 
 # This pyproject.toml exists only to declare dependencies for Vercel's Python builder;
@@ -37,9 +35,8 @@ merchant-agent-runtime = { path = "../merchant-agent/runtime-messages-api", edit
 # deployment; [tool.vercel] entrypoint is the separate, standalone-FastAPI-project
 # mechanism and isn't used in this layout.
 
-# Regenerates examples/logitech/data/*.json fresh from Typesense on every build,
-# instead of committing real Logitech catalog data into git (see .gitignore and
-# examples/logitech/README.md). Needs TYPESENSE_HOST/PORT/PROTOCOL/TYPESENSE_SEARCH_API_KEY
-# set as Vercel *build-time* environment variables.
-[tool.vercel.scripts]
-build = "python ../poc/logitech_ingest/build_catalog.py"
+# No build step: examples/logitech/data/*.json ships as static content with this
+# deployment (see .vercelignore) rather than being regenerated from Typesense at build
+# time — search-dev.logitech.com isn't reachable from Vercel's build infrastructure
+# (403 Forbidden). Refresh the data by rerunning poc/logitech_ingest/build_catalog.py
+# locally and redeploying; see examples/logitech/README.md.
