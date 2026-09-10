@@ -11,6 +11,7 @@ dependencies = [
   "shopping-agent-runtime",
   "merchant-agent-core",
   "merchant-agent-runtime",
+  "httpx>=0.28",
 ]
 
 # This pyproject.toml exists only to declare dependencies for Vercel's Python builder;
@@ -35,8 +36,10 @@ merchant-agent-runtime = { path = "../merchant-agent/runtime-messages-api", edit
 # deployment; [tool.vercel] entrypoint is the separate, standalone-FastAPI-project
 # mechanism and isn't used in this layout.
 
-# No build step: examples/logitech/data/*.json ships as static content with this
-# deployment (see .vercelignore) rather than being regenerated from Typesense at build
-# time — search-dev.logitech.com isn't reachable from Vercel's build infrastructure
-# (403 Forbidden). Refresh the data by rerunning poc/logitech_ingest/build_catalog.py
-# locally and redeploying; see examples/logitech/README.md.
+# No build step, and no catalog data to sync: LogitechBackend queries Typesense live,
+# per request (see api/typesense_client.py) — poc/logitech_ingest/ is a historical
+# reference for the raw-document mapping, not part of the running app. Only
+# data/users.json, orders.json, and policies.json (small, hand-authored, not from
+# Typesense) are still read from disk at runtime — see examples/logitech/README.md.
+# TYPESENSE_HOST/PORT/PROTOCOL/TYPESENSE_SEARCH_API_KEY must be reachable at *runtime*
+# now, not just from wherever you run this locally — see the README's production note.

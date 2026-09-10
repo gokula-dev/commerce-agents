@@ -1,9 +1,10 @@
 # Copyright 2026 Anthropic PBC
 # SPDX-License-Identifier: Apache-2.0
 
-"""Logitech example API: a StorefrontBackend over a real catalog synced from Cortex's own
-Typesense collection (``poc/logitech_ingest/build_catalog.py``), for comparing the
-commerce-agents shopping agent against Cortex V4 on the same underlying product data.
+"""Logitech example API: a StorefrontBackend over **live** queries against Cortex's own
+Typesense collection (``products_en_us``) — real hybrid text+vector search per request,
+not a one-time export loaded into memory. See ``typesense_client.py`` for the query and
+``normalize.py`` for the raw-document -> Product/ProductDetails mapping.
 
 Cortex itself exposes no cart, checkout, orders, or store-policy tools — it is a pure
 search-and-recommend assistant — so this backend's cart is a genuine *added* capability
@@ -19,19 +20,14 @@ from demo_common.storefront_fixtures import (
     SessionCarts,
     example_data_dir,
     find_product,
-    keyword_score,
-    load_catalog,
     load_orders,
     load_policies,
     load_users,
-    option_text,
     orders_for,
     preferences_of,
-    rank_products,
     search_help,
     summary_of,
     unavailable_detail,
-    within_price_and_rating,
 )
 from shopping_agent import (
     Cart,
@@ -47,39 +43,36 @@ from shopping_agent import (
     UserPreferences,
 )
 
-DATA_DIR = example_data_dir(__file__)
+from .normalize import normalize_document
+from .typesense_client import TypesenseError, get_document_by_product_id, search_documents
 
-_SEARCH_WEIGHTS = {
-    "title": 3.0,
-    "brand": 2.0,
-    "category": 2.0,
-    "attributes": 1.5,
-    "description": 1.0,
-}
-_SYNONYMS: dict[str, list[str]] = {
-    "mouse": ["mice"],
-    "mice": ["mouse"],
-    "webcam": ["camera"],
-    "camera": ["webcam"],
-    "headset": ["headphones", "earbuds"],
-    "headphones": ["headset"],
-    "keyboard": ["keys"],
-    "wireless": ["cordless", "bluetooth"],
-    "cordless": ["wireless"],
-}
-# Not a real inventory signal (see poc/logitech_ingest/normalize.py's module docstring):
-# in_stock here means "currently in Cortex's own sellability window", not live stock.
-_SEARCHABLE_ATTRIBUTE_SKIP = {"synced_at"}
+DATA_DIR = example_data_dir(__file__)
 
 
 class LogitechBackend(StorefrontBackend):
     def __init__(self, data_dir: Path = DATA_DIR) -> None:
-        catalog, self.products, self.variants = load_catalog(data_dir)
-        self.store_name: str = catalog.get("store_name", "Logitech")
+        self.store_name = "Logitech"
         self._users = load_users(data_dir)
         self._orders = load_orders(data_dir)
         self._policies = load_policies(data_dir)
         self._carts = SessionCarts()
+        # A live-fetch cache, not a preloaded catalog: populated as search/lookup calls
+        # resolve real documents, so `product()` (the sync path demo_common's routes and
+        # the cart gates use — it can't await a network call) only ever resolves what's
+        # already been seen this process, mirroring the gates' own "seen this session"
+        # provenance model rather than fighting it.
+        self.products: dict[str, ProductDetails] = {}
+        self.variants: dict[str, ProductDetails] = {}
+
+    def _cache_document(self, doc: dict[str, Any]) -> ProductDetails | None:
+        normalized = normalize_document(doc)
+        if normalized is None:
+            return None
+        record = ProductDetails.model_validate(normalized)
+        self.products[record.product_id] = record
+        for variant in record.variants:
+            self.variants[variant.product_id] = variant
+        return record
 
     # ------------------------------------------------------------------
     # Catalog
@@ -94,42 +87,6 @@ class LogitechBackend(StorefrontBackend):
             return self.products.get(record.variant_of)
         return record
 
-    def _searchable_text(self, product: ProductDetails) -> dict[str, str]:
-        return {
-            "title": product.title,
-            "brand": product.brand or "",
-            "category": product.category or "",
-            "attributes": (
-                " ".join(
-                    f"{k} {v}"
-                    for k, v in product.attributes.items()
-                    if k not in _SEARCHABLE_ATTRIBUTE_SKIP
-                )
-                + " "
-                + option_text(product)
-            ),
-            "description": f"{product.short_description or ''} {product.long_description or ''}",
-        }
-
-    def _score(self, product: ProductDetails, query_tokens: list[str]) -> float:
-        return keyword_score(
-            self._searchable_text(product), _SEARCH_WEIGHTS, query_tokens, _SYNONYMS
-        )
-
-    @staticmethod
-    def _soft_filter(product: ProductDetails, filters: SearchFilters) -> bool:
-        if filters.category and filters.category.lower() not in (product.category or "").lower():
-            return False
-        if not filters.attributes:
-            return True
-        haystack = " ".join(
-            f"{k}={v}".lower()
-            for k, v in product.attributes.items()
-            if k not in _SEARCHABLE_ATTRIBUTE_SKIP
-        )
-        haystack += f" {product.title.lower()} {option_text(product).lower()}"
-        return all(str(value).lower() in haystack for value in filters.attributes.values())
-
     async def search_products(
         self,
         session: ShoppingSessionContext,
@@ -138,22 +95,35 @@ class LogitechBackend(StorefrontBackend):
         limit: int = 8,
     ) -> list[Product]:
         del session
-        ranked = rank_products(
-            self.products.values(),
-            query,
-            filters,
-            limit,
-            score=self._score,
-            hard_filter=within_price_and_rating,
-            soft_filter=self._soft_filter,
-        )
-        return [summary_of(product) for product in ranked]
+        try:
+            docs = await search_documents(
+                query,
+                category=filters.category if filters else None,
+                min_price=filters.min_price if filters else None,
+                max_price=filters.max_price if filters else None,
+                limit=limit,
+            )
+        except TypesenseError:
+            # One search failing shouldn't crash the turn — the agent reads an empty
+            # result as "nothing found" and says so, per its own prompt rules.
+            return []
+        results = []
+        for doc in docs:
+            if record := self._cache_document(doc):
+                results.append(summary_of(record))
+        return results
 
     async def get_product_details(
         self, session: ShoppingSessionContext, product_id: str
     ) -> ProductDetails | None:
         del session
-        return self.product(product_id)
+        if cached := self.product(product_id):
+            return cached
+        try:
+            doc = await get_document_by_product_id(product_id)
+        except TypesenseError:
+            return None
+        return self._cache_document(doc) if doc else None
 
     # ------------------------------------------------------------------
     # Cart — a real capability this reference architecture adds beyond Cortex, which has
@@ -215,8 +185,6 @@ class LogitechBackend(StorefrontBackend):
     async def get_fulfillment_options(
         self, session: ShoppingSessionContext, product_ids: list[str]
     ) -> list[FulfillmentOption]:
-        # enable_fulfillment=False means this tool is never offered to the model, but
-        # StorefrontBackend still declares the method abstract.
         del session, product_ids
         return []
 
