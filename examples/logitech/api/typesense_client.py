@@ -40,20 +40,41 @@ class TypesenseError(RuntimeError):
     """A Typesense call failed; the caller decides how to degrade (see backend.py)."""
 
 
-def _client() -> httpx.AsyncClient:
-    host = os.environ.get("TYPESENSE_HOST")
-    key = os.environ.get("TYPESENSE_SEARCH_API_KEY")
-    if not host or not key:
-        raise TypesenseError(
-            "TYPESENSE_HOST / TYPESENSE_SEARCH_API_KEY not set in the environment"
+# One pooled, keep-alive client for the process lifetime, not one per call — measured
+# ~1s per call to search-dev.logitech.com even for a bare /health check (pure network
+# round-trip, not query cost), so paying a fresh TCP+TLS handshake on every single
+# search/lookup on top of that is pure waste. Doesn't fix the underlying per-request
+# round-trip time, but removes the handshake overhead stacked on top of it.
+_client: httpx.AsyncClient | None = None
+
+
+def _get_client() -> httpx.AsyncClient:
+    global _client
+    if _client is None:
+        host = os.environ.get("TYPESENSE_HOST")
+        key = os.environ.get("TYPESENSE_SEARCH_API_KEY")
+        if not host or not key:
+            raise TypesenseError(
+                "TYPESENSE_HOST / TYPESENSE_SEARCH_API_KEY not set in the environment"
+            )
+        port = os.environ.get("TYPESENSE_PORT", "443")
+        protocol = os.environ.get("TYPESENSE_PROTOCOL", "https")
+        _client = httpx.AsyncClient(
+            base_url=f"{protocol}://{host}:{port}",
+            headers={"X-TYPESENSE-API-KEY": key},
+            timeout=httpx.Timeout(connect=3.0, read=5.0, write=3.0, pool=3.0),
+            limits=httpx.Limits(max_keepalive_connections=10, max_connections=20),
         )
-    port = os.environ.get("TYPESENSE_PORT", "443")
-    protocol = os.environ.get("TYPESENSE_PROTOCOL", "https")
-    return httpx.AsyncClient(
-        base_url=f"{protocol}://{host}:{port}",
-        headers={"X-TYPESENSE-API-KEY": key},
-        timeout=httpx.Timeout(connect=3.0, read=5.0, write=3.0, pool=3.0),
-    )
+    return _client
+
+
+async def aclose() -> None:
+    """Call from a FastAPI shutdown hook if one gets added; harmless to skip for a
+    short-lived dev process."""
+    global _client
+    if _client is not None:
+        await _client.aclose()
+        _client = None
 
 
 def _price_filter(min_price: float | None, max_price: float | None) -> str | None:
@@ -89,14 +110,13 @@ async def search_documents(
         "exclude_fields": "embedding",
         "prioritize_exact_match": "true",
     }
-    async with _client() as client:
-        try:
-            response = await client.get(
-                f"/collections/{COLLECTION}/documents/search", params=params
-            )
-            response.raise_for_status()
-        except httpx.HTTPError as exc:
-            raise TypesenseError(f"search failed: {exc}") from exc
+    try:
+        response = await _get_client().get(
+            f"/collections/{COLLECTION}/documents/search", params=params
+        )
+        response.raise_for_status()
+    except httpx.HTTPError as exc:
+        raise TypesenseError(f"search failed: {exc}") from exc
     return [hit["document"] for hit in response.json().get("hits", [])]
 
 
@@ -113,13 +133,12 @@ async def get_document_by_product_id(product_id: str) -> dict[str, Any] | None:
         "per_page": 1,
         "exclude_fields": "embedding",
     }
-    async with _client() as client:
-        try:
-            response = await client.get(
-                f"/collections/{COLLECTION}/documents/search", params=params
-            )
-            response.raise_for_status()
-        except httpx.HTTPError as exc:
-            raise TypesenseError(f"lookup failed: {exc}") from exc
+    try:
+        response = await _get_client().get(
+            f"/collections/{COLLECTION}/documents/search", params=params
+        )
+        response.raise_for_status()
+    except httpx.HTTPError as exc:
+        raise TypesenseError(f"lookup failed: {exc}") from exc
     hits = response.json().get("hits", [])
     return hits[0]["document"] if hits else None
