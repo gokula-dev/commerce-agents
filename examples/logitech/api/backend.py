@@ -21,6 +21,7 @@ kept in-memory for the comparison, not something to read as like-for-like with C
 from __future__ import annotations
 
 import asyncio
+import logging
 import os
 from pathlib import Path
 from typing import Any
@@ -55,6 +56,8 @@ from shopping_agent import (
 from .gcp_retail_client import GcpRetailError, search_candidate_ids
 from .normalize import normalize_document
 from .typesense_client import TypesenseError, get_document_by_product_id, search_documents
+
+logger = logging.getLogger(__name__)
 
 DATA_DIR = example_data_dir(__file__)
 GCP_RETAIL_SEARCH = "gcp-retail-search"
@@ -125,9 +128,11 @@ class LogitechBackend(StorefrontBackend):
                 max_price=filters.max_price if filters else None,
                 limit=limit,
             )
-        except TypesenseError:
+        except TypesenseError as exc:
             # One search failing shouldn't crash the turn — the agent reads an empty
-            # result as "nothing found" and says so, per its own prompt rules.
+            # result as "nothing found" and says so, per its own prompt rules. Logged
+            # so a wave of "no results" turns is traceable to *why* rather than silent.
+            logger.warning("Typesense search failed for %r: %s", query, exc)
             return []
         results = []
         for doc in docs:
@@ -154,7 +159,8 @@ class LogitechBackend(StorefrontBackend):
                 visitor_id=session.session_id,
                 limit=limit,
             )
-        except GcpRetailError:
+        except GcpRetailError as exc:
+            logger.warning("GCP Retail Search failed for %r: %s", query, exc)
             return []
         # Hydrate concurrently: these are independent lookups, and the pooled Typesense
         # client (typesense_client.py) already reuses one connection across them.
@@ -163,8 +169,11 @@ class LogitechBackend(StorefrontBackend):
             return_exceptions=True,
         )
         results = []
-        for doc in docs:
-            if isinstance(doc, BaseException) or doc is None:
+        for pid, doc in zip(candidate_ids, docs, strict=True):
+            if isinstance(doc, BaseException):
+                logger.warning("Typesense hydration failed for GCP candidate %r: %s", pid, doc)
+                continue
+            if doc is None:
                 continue
             if record := self._cache_document(doc):
                 results.append(summary_of(record))
@@ -178,7 +187,8 @@ class LogitechBackend(StorefrontBackend):
             return cached
         try:
             doc = await get_document_by_product_id(product_id)
-        except TypesenseError:
+        except TypesenseError as exc:
+            logger.warning("Typesense lookup failed for %r: %s", product_id, exc)
             return None
         return self._cache_document(doc) if doc else None
 
