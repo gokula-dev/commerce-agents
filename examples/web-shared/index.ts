@@ -8,7 +8,7 @@
 
 export { AgentApi } from "./api";
 export { useCatalogIndex } from "./catalog";
-export { type Prefill } from "./Composer";
+export { Composer, type Prefill } from "./Composer";
 export * from "./format";
 export { type GenerativeBlockProps, UnknownBlock } from "./generative";
 export { Icon, type IconName } from "./icons";

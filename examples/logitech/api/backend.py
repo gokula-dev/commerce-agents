@@ -62,9 +62,12 @@ TYPESENSE = "typesense"
 
 
 class LogitechBackend(StorefrontBackend):
-    def __init__(self, data_dir: Path = DATA_DIR) -> None:
+    def __init__(self, data_dir: Path = DATA_DIR, *, search_backend: str | None = None) -> None:
         self.store_name = "Logitech"
-        self.search_backend = os.environ.get("SEARCH_BACKEND", TYPESENSE)
+        # An explicit search_backend pins the instance (used for the side-by-side A/B
+        # compare stacks in main.py, one per engine); otherwise SEARCH_BACKEND/the
+        # runtime toggle governs it, as on the single-agent demo.
+        self.search_backend = search_backend or os.environ.get("SEARCH_BACKEND", TYPESENSE)
         self._users = load_users(data_dir)
         self._orders = load_orders(data_dir)
         self._policies = load_policies(data_dir)

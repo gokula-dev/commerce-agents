@@ -3,6 +3,7 @@
 
 "use client";
 
+import Link from "next/link";
 import { useCallback, useEffect, useState } from "react";
 import { type AgentEvent, formatMoney, OrdersView, plural, StoreShell, type StoreView, upcoming, useAgentTurn, useResource, useSession } from "web-shared";
 import CartPanel from "@/components/CartPanel";
@@ -71,6 +72,9 @@ export default function StorefrontPage() {
         <div className="flex items-center gap-3">
           <Wordmark />
           <SearchBackendToggle />
+          <Link href="/compare" className="text-[12px] font-medium text-(--ink-soft) transition-colors hover:text-(--ink)">
+            A/B compare →
+          </Link>
         </div>
       }
       views={views}

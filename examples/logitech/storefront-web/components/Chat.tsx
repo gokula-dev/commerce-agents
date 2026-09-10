@@ -11,8 +11,9 @@ import GenerativeBlock from "./generative";
 
 const WIDE = new Set(["comparison", "plan"]);
 
-/** Shimmers where the carousel will land while a search runs. */
-function Pending({ item }: { item: AssistantChatItem }) {
+/** Shimmers where the carousel will land while a search runs. Exported for the
+ * side-by-side compare page, which reuses the same loading treatment per column. */
+export function Pending({ item }: { item: AssistantChatItem }) {
   const searching = item.tools.includes("search_products") && !item.segments.some((s) => s.type === "ui");
   if (!searching) return <ActivityLine item={item} />;
   return (
