@@ -17,10 +17,14 @@ from pathlib import Path
 
 from commerce_common.memory import InMemoryMemoryStore
 from demo_common import CartAddRequest, MemorySeeder, build_storefront_host, load_demo_env
+from fastapi import HTTPException
+from pydantic import BaseModel
 from shopping_agent_runtime import ShoppingAgent
 
 from .agent_config import build_shopping_config
-from .backend import DATA_DIR, LogitechBackend
+from .backend import DATA_DIR, GCP_RETAIL_SEARCH, TYPESENSE, LogitechBackend
+
+_VALID_BACKENDS = {TYPESENSE, GCP_RETAIL_SEARCH}
 
 load_demo_env(DATA_DIR.parent)
 
@@ -57,3 +61,26 @@ async def cart_add(request: CartAddRequest, record: host.CurrentSession) -> dict
         request,
         note="Customer tapped the add-to-cart button on {title} ({product_id}), quantity {quantity}.",
     )
+
+
+class SearchBackendRequest(BaseModel):
+    backend: str
+
+
+@app.get("/api/search-backend")
+async def get_search_backend() -> dict:
+    """Which candidate-ranking engine is active — for demo visibility, not consumed by
+    the agent itself."""
+    return {"backend": backend.search_backend, "options": sorted(_VALID_BACKENDS)}
+
+
+@app.post("/api/search-backend")
+async def set_search_backend(request: SearchBackendRequest) -> dict:
+    """Switch the ranking engine live, no restart — a global, process-wide toggle (every
+    visitor shares it) for demo purposes, not a per-session preference."""
+    if request.backend not in _VALID_BACKENDS:
+        raise HTTPException(
+            status_code=400, detail=f"backend must be one of {sorted(_VALID_BACKENDS)}"
+        )
+    backend.search_backend = request.backend
+    return {"backend": backend.search_backend}

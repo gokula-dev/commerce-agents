@@ -25,3 +25,19 @@ export async function addToCart(productId: string, quantity = 1): Promise<CartPa
   const data = await api.post<{ cart: CartPayload }>("/cart/add", { product_id: productId, quantity });
   return data?.cart ?? null;
 }
+
+export interface SearchBackendState {
+  backend: string;
+  options?: string[];
+}
+
+/** A global, process-wide toggle (every visitor shares it) — for comparing the
+ * Typesense and GCP Retail Search ranking backends live, not a per-session setting. */
+export function fetchSearchBackend(): Promise<SearchBackendState | null> {
+  return api.get<SearchBackendState>("/search-backend");
+}
+
+export async function setSearchBackend(backend: string): Promise<string | null> {
+  const data = await api.post<{ backend: string }>("/search-backend", { backend });
+  return data?.backend ?? null;
+}

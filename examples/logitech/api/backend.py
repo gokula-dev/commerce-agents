@@ -6,6 +6,13 @@ Typesense collection (``products_en_us``) — real hybrid text+vector search per
 not a one-time export loaded into memory. See ``typesense_client.py`` for the query and
 ``normalize.py`` for the raw-document -> Product/ProductDetails mapping.
 
+``SEARCH_BACKEND`` (env var, default ``typesense``) toggles candidate ranking between
+Typesense's hybrid text+vector search and GCP Retail Search's keyword+ML ranking
+(``gcp_retail_client.py``) — the same A/B pattern dtx-platform's PR #7813 (CTX-697)
+settled on for Cortex itself. Content is *always* hydrated from Typesense regardless of
+which engine ranked the candidates, so a toggle changes only the ranking engine, never
+where product content comes from — set ``SEARCH_BACKEND=gcp-retail-search`` to compare.
+
 Cortex itself exposes no cart, checkout, orders, or store-policy tools — it is a pure
 search-and-recommend assistant — so this backend's cart is a genuine *added* capability
 kept in-memory for the comparison, not something to read as like-for-like with Cortex.
@@ -13,6 +20,8 @@ kept in-memory for the comparison, not something to read as like-for-like with C
 
 from __future__ import annotations
 
+import asyncio
+import os
 from pathlib import Path
 from typing import Any
 
@@ -43,15 +52,19 @@ from shopping_agent import (
     UserPreferences,
 )
 
+from .gcp_retail_client import GcpRetailError, search_candidate_ids
 from .normalize import normalize_document
 from .typesense_client import TypesenseError, get_document_by_product_id, search_documents
 
 DATA_DIR = example_data_dir(__file__)
+GCP_RETAIL_SEARCH = "gcp-retail-search"
+TYPESENSE = "typesense"
 
 
 class LogitechBackend(StorefrontBackend):
     def __init__(self, data_dir: Path = DATA_DIR) -> None:
         self.store_name = "Logitech"
+        self.search_backend = os.environ.get("SEARCH_BACKEND", TYPESENSE)
         self._users = load_users(data_dir)
         self._orders = load_orders(data_dir)
         self._policies = load_policies(data_dir)
@@ -94,7 +107,13 @@ class LogitechBackend(StorefrontBackend):
         filters: SearchFilters | None = None,
         limit: int = 8,
     ) -> list[Product]:
-        del session
+        if self.search_backend == GCP_RETAIL_SEARCH:
+            return await self._search_via_gcp(session, query, filters, limit)
+        return await self._search_via_typesense(query, filters, limit)
+
+    async def _search_via_typesense(
+        self, query: str, filters: SearchFilters | None, limit: int
+    ) -> list[Product]:
         try:
             docs = await search_documents(
                 query,
@@ -109,6 +128,41 @@ class LogitechBackend(StorefrontBackend):
             return []
         results = []
         for doc in docs:
+            if record := self._cache_document(doc):
+                results.append(summary_of(record))
+        return results
+
+    async def _search_via_gcp(
+        self,
+        session: ShoppingSessionContext,
+        query: str,
+        filters: SearchFilters | None,
+        limit: int,
+    ) -> list[Product]:
+        """GCP ranks candidate ids; Typesense still hydrates full content — the same
+        split dtx-platform's PR #7813 uses, so the toggle isolates ranking quality as
+        the only variable. Degrades to empty on failure, same as the Typesense path."""
+        try:
+            candidate_ids = await search_candidate_ids(
+                query,
+                category=filters.category if filters else None,
+                min_price=filters.min_price if filters else None,
+                max_price=filters.max_price if filters else None,
+                visitor_id=session.session_id,
+                limit=limit,
+            )
+        except GcpRetailError:
+            return []
+        # Hydrate concurrently: these are independent lookups, and the pooled Typesense
+        # client (typesense_client.py) already reuses one connection across them.
+        docs = await asyncio.gather(
+            *(get_document_by_product_id(pid) for pid in candidate_ids),
+            return_exceptions=True,
+        )
+        results = []
+        for doc in docs:
+            if isinstance(doc, BaseException) or doc is None:
+                continue
             if record := self._cache_document(doc):
                 results.append(summary_of(record))
         return results

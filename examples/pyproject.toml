@@ -12,6 +12,11 @@ dependencies = [
   "merchant-agent-core",
   "merchant-agent-runtime",
   "httpx>=0.28",
+  # GCP Retail Search toggle (api/gcp_retail_client.py) — REST calls via httpx, but
+  # token minting from a service account key needs google-auth; google-auth's own
+  # refresh transport needs `requests` (its httpx transport isn't used here).
+  "google-auth>=2.30",
+  "requests>=2.31",
 ]
 
 # This pyproject.toml exists only to declare dependencies for Vercel's Python builder;

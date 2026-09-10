@@ -7,6 +7,7 @@ import { useCallback, useEffect, useState } from "react";
 import { type AgentEvent, formatMoney, OrdersView, plural, StoreShell, type StoreView, upcoming, useAgentTurn, useResource, useSession } from "web-shared";
 import CartPanel from "@/components/CartPanel";
 import Chat from "@/components/Chat";
+import SearchBackendToggle from "@/components/SearchBackendToggle";
 import HomeView from "@/components/views/HomeView";
 import { api, UNREACHABLE } from "@/lib/api";
 import { NOUNS, OrderThumb } from "@/lib/orders";
@@ -66,7 +67,12 @@ export default function StorefrontPage() {
 
   return (
     <StoreShell
-      brand={<Wordmark />}
+      brand={
+        <div className="flex items-center gap-3">
+          <Wordmark />
+          <SearchBackendToggle />
+        </div>
+      }
       views={views}
       view={view}
       onViewChange={setView}

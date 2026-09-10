@@ -40,6 +40,32 @@ because the local machine already has whatever network access (VPN/corporate net
 earlier version of this example) is kept only as a **historical reference** for the
 raw-document mapping — it's not part of the running app anymore.
 
+### Toggleable ranking backend: Typesense vs. GCP Retail Search
+
+`SEARCH_BACKEND` (env var, default `typesense`) switches which engine ranks search
+candidates — set `SEARCH_BACKEND=gcp-retail-search` to compare against GCP Retail Search
+(keyword + Google ML ranking), the same **A/B pattern dtx-platform's own PR #7813
+(CTX-697)** settled on for Cortex itself. `GET /api/search-backend` reports which one is
+active. Content is *always* hydrated from Typesense regardless of which engine ranked the
+candidates (`api/gcp_retail_client.py` returns ranked ids only, never product content) —
+mirroring that PR's own design exactly, so the toggle isolates ranking quality as the only
+variable, the same way it does in production.
+
+Needs `GCP_PROJECT_ID` and `GCP_SERVICE_ACCOUNT_JSON` (a service account key, raw or
+base64 — both already in dtx-platform's `.env`) plus the same
+`GCP_RETAIL_CATALOG`/`SERVING_CONFIG`/`LOCATION`/`BRANCH` defaults
+`@logi/retail-search` uses. Filter/eligibility syntax (`attributes.physicalProduct`,
+`embargoDate`/`expiryDate`, bare `price` comparisons, spare-part exclusion) is mirrored
+from that PR's own tuned, production-verified logic, not re-derived from scratch.
+
+**Real, observed quality difference** (not hypothetical): on an indirect wrist-pain
+query, Typesense's hybrid search found ergonomic products on the first try; GCP Retail
+Search's first attempt (a longer, more natural phrasing) returned **zero results**, and
+the agent had to retry with a shorter, more keyword-like query before finding the same
+kind of products. Worth including as-is in the comparison writeup — it's a genuine
+behavioral difference between the two ranking engines on this catalog, not a bug in
+either integration.
+
 ## Setup
 
 ```bash
@@ -109,6 +135,10 @@ accuracy, latency, and how each handles a query the catalog can't satisfy.
 
 - `api/typesense_client.py`: the live hybrid search/lookup calls, read-only, using
   `TYPESENSE_SEARCH_API_KEY` only.
+- `api/gcp_retail_client.py`: the alternate GCP Retail Search ranking backend
+  (`SEARCH_BACKEND=gcp-retail-search`) — REST calls via `httpx` (not the heavier
+  `google-cloud-retail` gRPC SDK), auth via `google-auth` from a service account key.
+  Ranks candidate ids only; `backend.py` hydrates their content from Typesense.
 - `api/normalize.py`: raw Typesense document → `Product`/`ProductDetails` mapping
   (Plain-vs-Family modeling) — a copy of, not an import from, the historical
   `poc/logitech_ingest/normalize.py`, for the same Vercel-bundling reason as `skills/`
