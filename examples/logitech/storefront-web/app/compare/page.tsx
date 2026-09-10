@@ -18,8 +18,10 @@ const WIDE = new Set(["comparison", "plan"]);
 const apiTs = new AgentApi(API_URL, "/api/compare/ts/api");
 const apiGcp = new AgentApi(API_URL, "/api/compare/gcp/api");
 
-const UNREACHABLE_TS = "Couldn't reach the Typesense compare session on port 8004.";
-const UNREACHABLE_GCP = "Couldn't reach the GCP Retail Search compare session on port 8004.";
+// Same caveat as lib/api.ts's UNREACHABLE: a dead API and a 401 from a forgotten
+// in-memory session look identical here, so this can't claim which one happened.
+const UNREACHABLE_TS = "The Typesense session was lost — refresh the page to start a new one.";
+const UNREACHABLE_GCP = "The GCP Retail Search session was lost — refresh the page to start a new one.";
 
 function ColumnHome({ label }: { label: string }) {
   return (

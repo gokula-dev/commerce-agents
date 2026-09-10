@@ -8,9 +8,13 @@ const API_URL = process.env.NEXT_PUBLIC_API_URL ?? "http://localhost:8004";
 
 export const api = new AgentApi(API_URL, "/api");
 
+// AgentApi.chatStream throws on any non-ok response — a genuinely dead API and a plain
+// 401 ("Unknown session", from the in-memory SessionStore forgetting a session across a
+// reload or a serverless cold start) look identical from here, so this can't claim which
+// one happened. Refreshing starts a fresh session either way.
 export const UNREACHABLE =
-  "Couldn't reach the Logitech demo API on port 8004. Start it with " +
-  "`uvicorn logitech.api.main:app --app-dir examples --port 8004` and try again.";
+  "This chat session was lost — refresh the page to start a new one. If you're running " +
+  "locally, also make sure the API is up: `uvicorn logitech.api.main:app --app-dir examples --port 8004`.";
 
 export async function fetchProducts(): Promise<Product[] | null> {
   const data = await api.get<{ products: Product[] }>("/products", { limit: "100" });
